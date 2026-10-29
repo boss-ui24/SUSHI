@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ru" class="no-js is-loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NAMI 波 — суши-бар в Баку</title>
+<meta name="description" content="Демо-сайт суши-бара: 3D-суши, собранные кодом на Three.js, анимации GSAP и три языка — AZ, RU, EN.">
+<meta name="theme-color" content="#0c0a09">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400..700&family=Unbounded:wght@400..800&family=Yuji+Syuku&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11.1.14/swiper-bundle.min.css">
+<link rel="stylesheet" href="css/style.css">
+<script>
+  /* Язык выставляем до первой отрисовки, чтобы не мигал русский текст */
+  (function () {
+    var d = document.documentElement, l;
+    d.classList.replace('no-js', 'js');
+    try { l = new URLSearchParams(location.search).get('lang') || localStorage.getItem('nami-lang'); } catch (e) {}
+    if (l === 'az' || l === 'ru' || l === 'en') d.lang = l;
+  })();
+</script>
+</head>
+<body>
+
+<!-- Фон за canvas: мягкие пятна света -->
+<div class="bg" aria-hidden="true"><i class="bg__glow bg__glow--a"></i><i class="bg__glow bg__glow--b"></i></div>
+<!-- Единый WebGL-canvas: все 3D-сцены рисуются в него через scissor по DOM-элементам с data-view -->
+<canvas id="gl" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
+<div class="progress" aria-hidden="true"><i></i></div>
+
+<div class="cursor" aria-hidden="true">
+  <div class="cursor__ring"><span class="cursor__label"></span></div>
+  <div class="cursor__dot"></div>
+</div>
+
+<!-- Прелоадер: энсо рисуется DrawSVG -->
+<div class="preloader" data-preloader>
+  <div class="preloader__panel preloader__panel--top"></div>
+  <div class="preloader__panel preloader__panel--bottom"></div>
+  <div class="preloader__center">
+    <svg class="enso" viewBox="0 0 200 200" aria-hidden="true">
+      <defs>
+        <filter id="brush" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/>
+        </filter>
+      </defs>
+      <path class="enso__path" d="M112 22 C 160 28, 186 70, 178 112 C 170 158, 128 184, 88 178 C 46 172, 18 136, 22 94 C 26 56, 56 28, 92 24"/>
+    </svg>
+    <span class="preloader__kanji" lang="ja">波</span>
+    <div class="preloader__count"><span data-preload-num>0</span><small>%</small></div>
+    <p class="preloader__status" data-preload-status></p>
+  </div>
+</div>
+
+<!-- Шторка смены языка -->
+<div class="wipe" aria-hidden="true">
+  <div class="wipe__inner"><span class="wipe__jp" lang="ja">言語</span><span class="wipe__label" data-wipe-label></span></div>
+</div>
+
+<header class="header" data-header>
+  <a href="#top" class="logo" data-magnetic aria-label="NAMI — наверх" data-i18n-attr="aria-label:a11y.home">
+    <span class="logo__mark" lang="ja">波</span><span class="logo__word">NAMI</span>
+  </a>
+  <nav class="nav" aria-label="Разделы" data-i18n-attr="aria-label:a11y.nav">
+    <a href="#anatomy" data-nav="anatomy" data-scramble data-i18n="nav.anatomy">Анатомия</a>
+    <a href="#menu" data-nav="menu" data-scramble data-i18n="nav.menu">Меню</a>
+    <a href="#kaiten" data-nav="kaiten" data-scramble data-i18n="nav.kaiten">Кайтен</a>
+    <a href="#reviews" data-nav="reviews" data-scramble data-i18n="nav.reviews">Отзывы</a>
+    <a href="#delivery" data-nav="delivery" data-scramble data-i18n="nav.delivery">Доставка</a>
+  </nav>
+  <div class="header__actions">
+    <div class="lang" role="group" aria-label="Язык сайта" data-i18n-attr="aria-label:a11y.lang">
+      <span class="lang__pill" aria-hidden="true"></span>
+      <button type="button" class="lang__btn" data-lang="az" lang="az" title="Azərbaycanca" aria-pressed="false">AZ</button>
+      <button type="button" class="lang__btn" data-lang="ru" lang="ru" title="Русский" aria-pressed="true">RU</button>
+      <button type="button" class="lang__btn" data-lang="en" lang="en" title="English" aria-pressed="false">EN</button>
+    </div>
+    <button type="button" class="cart-btn" data-cart-open data-magnetic aria-label="Открыть корзину" data-i18n-attr="aria-label:cart.open">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8Z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>
+      <span class="cart-btn__count" data-cart-count>0</span>
+    </button>
+    <button type="button" class="burger" data-burger aria-expanded="false" aria-controls="mnav" aria-label="Открыть навигацию" data-i18n-attr="aria-label:a11y.burger"><span></span><span></span></button>
+  </div>
+</header>
+
+<div class="mnav" id="mnav" data-mnav hidden>
+  <nav class="mnav__links" aria-label="Разделы" data-i18n-attr="aria-label:a11y.nav">
+    <a href="#anatomy"><small>01</small><span data-i18n="nav.anatomy">Анатомия</span></a>
+    <a href="#menu"><small>02</small><span data-i18n="nav.menu">Меню</span></a>
+    <a href="#kaiten"><small>03</small><span data-i18n="nav.kaiten">Кайтен</span></a>
+    <a href="#reviews"><small>05</small><span data-i18n="nav.reviews">Отзывы</span></a>
+    <a href="#delivery"><small>06</small><span data-i18n="nav.delivery">Доставка</span></a>
+  </nav>
+  <p class="mnav__jp" lang="ja" aria-hidden="true">寿司</p>
+</div>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="hero" id="top" data-view="hero">
+    <span class="hero__kanji" lang="ja" aria-hidden="true">波</span>
+    <div class="hero__inner">
+      <p class="eyebrow hero__eyebrow"><i class="dot"></i><span data-i18n="hero.eyebrow">Суши-бар · Баку · Приморский бульвар</span></p>
+      <h1 class="hero__title">
+        <span class="hero__line" data-i18n="hero.t1">Суши,</span>
+        <span class="hero__line hero__line--outline" data-i18n="hero.t2">которые хочется</span>
+        <span class="hero__line hero__line--accent" data-i18n="hero.t3">рассмотреть</span>
+      </h1>
+      <p class="hero__lead" data-i18n="hero.lead">Каспийская свежесть, японская техника. Каждый кусочек на этой странице собран кодом в 3D — покрутите нигири мышкой.</p>
+      <div class="hero__cta">
+        <a href="#menu" class="btn btn--primary" data-magnetic><span data-i18n="hero.cta1">Открыть меню</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <a href="#anatomy" class="btn btn--ghost" data-magnetic><span data-i18n="hero.cta2">Анатомия ролла</span></a>
+      </div>
+      <ul class="hero__stats">
+        <li><b>4.9</b><span data-i18n="hero.s1">рейтинг гостей</span></li>
+        <li><b>35′</b><span data-i18n="hero.s2">минут на доставку</span></li>
+        <li><b>0</b><span data-i18n="hero.s3">фото — всё нарисовано кодом</span></li>
+      </ul>
+    </div>
+    <div class="hero__drag" data-hero-drag data-cursor="drag"></div>
+    <p class="hero__vertical" lang="ja" aria-hidden="true">新鮮な魚と職人の技</p>
+    <p class="hero__hint"><i></i><span data-i18n="hero.hint">Тяните, чтобы крутить</span></p>
+    <a href="#anatomy" class="hero__scroll"><span data-i18n="hero.scroll">Листайте</span><i></i></a>
+  </section>
+
+  <!-- ============ MARQUEE ============ -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee__row" data-marquee="1"><div class="marquee__track"><span>NIGIRI</span><b>✦</b><span>URAMAKI</span><b>✦</b><span lang="ja">寿司</span><b>✦</b><span>SASHIMI</span><b>✦</b><span>GUNKAN</span><b>✦</b><span>TEMAKI</span><b>✦</b><span lang="ja">波</span><b>✦</b></div></div>
+    <div class="marquee__row marquee__row--alt" data-marquee="-1"><div class="marquee__track"><span>KAITEN</span><b>✦</b><span>OMAKASE</span><b>✦</b><span lang="ja">鮭</span><b>✦</b><span>WASABI</span><b>✦</b><span>NORI</span><b>✦</b><span>SHARI</span><b>✦</b><span lang="ja">海苔</span><b>✦</b></div></div>
+  </div>
+
+  <!-- ============ ANATOMY ============ -->
+  <section class="anatomy" id="anatomy">
+    <div class="anatomy__pin">
+      <div class="anatomy__copy">
+        <p class="eyebrow"><i class="dot"></i><span data-i18n="anat.eyebrow">01 — Анатомия</span></p>
+        <h2 class="h2" data-split data-i18n="anat.title">Разбираем «Филадельфию» по слоям</h2>
+        <p class="lead" data-i18n="anat.lead">Листайте вниз — ролл разлетится на ингредиенты. Шесть слоёв, тридцать граммов, ничего лишнего.</p>
+        <dl class="anatomy__spec">
+          <div><dt data-i18n="anat.k1">Слоёв</dt><dd>6</dd></div>
+          <div><dt data-i18n="anat.k2">Вес кусочка</dt><dd data-i18n="anat.v2">30 г</dd></div>
+          <div><dt data-i18n="anat.k3">Энергия</dt><dd data-i18n="anat.v3">52 ккал</dd></div>
+        </dl>
+        <div class="anatomy__progress"><span class="anatomy__bar"><i data-anat-bar></i></span><span class="anatomy__step" data-anat-step>00 / 06</span></div>
+      </div>
+      <div class="anatomy__stage" data-view="anatomy">
+        <svg class="anatomy__lines" data-anat-lines aria-hidden="true"></svg>
+        <ul class="anatomy__labels">
+          <li class="alabel" data-layer="0"><b data-i18n="anat.l0">Лосось</b><span data-i18n="anat.d0">Норвежский, охлаждённый</span></li>
+          <li class="alabel" data-layer="1"><b data-i18n="anat.l1">Рис</b><span data-i18n="anat.d1">Кошихикари с рисовым уксусом</span></li>
+          <li class="alabel" data-layer="2"><b data-i18n="anat.l2">Нори</b><span data-i18n="anat.d2">Обжаренный лист водорослей</span></li>
+          <li class="alabel" data-layer="3"><b data-i18n="anat.l3">Сливочный сыр</b><span data-i18n="anat.d3">Мягкий, нежный</span></li>
+          <li class="alabel" data-layer="4"><b data-i18n="anat.l4">Огурец</b><span data-i18n="anat.d4">Хруст и свежесть</span></li>
+          <li class="alabel" data-layer="5"><b data-i18n="anat.l5">Авокадо</b><span data-i18n="anat.d5">Спелый и маслянистый</span></li>
+        </ul>
+        <p class="anatomy__hint"><i></i><span data-i18n="anat.hint">Продолжайте листать</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MENU ============ -->
+  <section class="menu section" id="menu">
+    <div class="section-head">
+      <p class="eyebrow"><i class="dot"></i><span data-i18n="menu.eyebrow">02 — Меню</span></p>
+      <h2 class="h2" data-split data-i18n="menu.title">Каждое блюдо — живая 3D-модель</h2>
+      <p class="lead" data-i18n="menu.lead">Наведите курсор на карточку — суши повернутся к вам. Фильтры перестраивают сетку плагином Flip.</p>
+    </div>
+    <div class="filters" data-filters>
+      <button type="button" class="chip is-active" data-filter="all" aria-pressed="true" data-i18n="menu.f.all">Все</button>
+      <button type="button" class="chip" data-filter="rolls" aria-pressed="false" data-i18n="menu.f.rolls">Роллы</button>
+      <button type="button" class="chip" data-filter="nigiri" aria-pressed="false" data-i18n="menu.f.nigiri">Нигири</button>
+      <button type="button" class="chip" data-filter="gunkan" aria-pressed="false" data-i18n="menu.f.gunkan">Гунканы и темаки</button>
+      <button type="button" class="chip" data-filter="sashimi" aria-pressed="false" data-i18n="menu.f.sashimi">Сашими</button>
+      <button type="button" class="chip" data-filter="sets" aria-pressed="false" data-i18n="menu.f.sets">Сеты</button>
+    </div>
+    <div class="menu__grid" data-menu-grid></div>
+  </section>
+
+  <!-- ============ PROMO SET ============ -->
+  <section class="promo section">
+    <div class="promo__card">
+      <div class="promo__media" data-view="card" data-model="set" data-cursor="view"></div>
+      <div class="promo__body">
+        <span class="badge badge--gold" data-i18n="promo.badge">Сет недели</span>
+        <h2 class="h2 promo__title" data-i18n="promo.title">«Нами» — 24 кусочка</h2>
+        <p class="lead" data-i18n="promo.text">Всё самое любимое на одной доске: Филадельфия, Калифорния, нигири и гунканы.</p>
+        <p class="promo__ends" data-i18n="promo.ends">До конца акции:</p>
+        <div class="countdown" data-countdown>
+          <div><b data-cd="d">00</b><span data-i18n="cd.d">дн</span></div>
+          <div><b data-cd="h">00</b><span data-i18n="cd.h">ч</span></div>
+          <div><b data-cd="m">00</b><span data-i18n="cd.m">мин</span></div>
+          <div><b data-cd="s">00</b><span data-i18n="cd.s">сек</span></div>
+        </div>
+        <div class="promo__buy">
+          <p class="promo__price"><b data-price="set">59 ₼</b><s data-price-old="set">72 ₼</s></p>
+          <button type="button" class="btn btn--primary" data-add="set" data-magnetic><span data-i18n="promo.cta">Добавить сет</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ KAITEN ============ -->
+  <section class="kaiten section" id="kaiten">
+    <div class="section-head">
+      <p class="eyebrow"><i class="dot"></i><span data-i18n="kaiten.eyebrow">03 — Кайтен</span></p>
+      <h2 class="h2" data-split data-i18n="kaiten.title">Ловите тарелки с конвейера</h2>
+      <p class="lead" data-i18n="kaiten.lead">Как в настоящем кайтен-баре: нажмите на тарелку — она отправится в корзину. Прокрутка ускоряет ленту.</p>
+    </div>
+    <div class="kaiten__stage" data-view="kaiten" data-cursor="take">
+      <div class="kaiten__tip" data-kaiten-tip><i data-tip-dot></i><b data-tip-name></b><span data-tip-price></span></div>
+      <ul class="kaiten__legend">
+        <li><i style="--c:#78b54a"></i><span data-i18n="plate.green">Зелёная</span><b data-plate-price="green">4 ₼</b></li>
+        <li><i style="--c:#f2c14e"></i><span data-i18n="plate.yellow">Жёлтая</span><b data-plate-price="yellow">6 ₼</b></li>
+        <li><i style="--c:#e2483d"></i><span data-i18n="plate.red">Красная</span><b data-plate-price="red">8 ₼</b></li>
+        <li><i style="--c:#2a2421"></i><span data-i18n="plate.black">Чёрная</span><b data-plate-price="black">12 ₼</b></li>
+      </ul>
+      <p class="kaiten__count"><span data-i18n="kaiten.taken">Взято тарелок</span><b data-kaiten-count>0</b></p>
+    </div>
+  </section>
+
+  <!-- ============ PHILOSOPHY ============ -->
+  <section class="philo section">
+    <span class="philo__jp" lang="ja" aria-hidden="true">米と魚</span>
+    <p class="eyebrow"><i class="dot"></i><span data-i18n="philo.eyebrow">04 — Философия</span></p>
+    <blockquote class="philo__quote" data-words data-i18n="philo.quote">Рис — сердце суши, рыба — его душа. Мы десять лет учились у мастеров в Осаке, чтобы привезти этот баланс на берег Каспия.</blockquote>
+    <p class="philo__author" data-i18n="philo.author">— Шеф-повар NAMI</p>
+    <ul class="stats">
+      <li class="stat" data-tilt><b data-count="10">0</b><span data-i18n="philo.s1">лет практики в Осаке</span></li>
+      <li class="stat" data-tilt><b data-count="7">0</b><span data-i18n="philo.s2">видов рыбы каждое утро</span></li>
+      <li class="stat" data-tilt><b data-count="1200">0</b><span data-i18n="philo.s3">роллов в день</span></li>
+      <li class="stat" data-tilt><b data-count="35">0</b><span data-i18n="philo.s4">минут до вашей двери</span></li>
+    </ul>
+  </section>
+
+  <!-- ============ REVIEWS ============ -->
+  <section class="reviews section" id="reviews">
+    <div class="reviews__grid">
+      <div class="reviews__copy">
+        <p class="eyebrow"><i class="dot"></i><span data-i18n="rev.eyebrow">05 — Отзывы</span></p>
+        <h2 class="h2" data-split data-i18n="rev.title">Гости говорят</h2>
+        <p class="lead" data-i18n="rev.lead">Карточки сложены стопкой в 3D — смахните верхнюю.</p>
+        <div class="reviews__rating"><b>4.9</b><span class="stars" aria-hidden="true">★★★★★</span><small data-i18n="rev.count">по 1 280 отзывам</small></div>
+        <div class="reviews__nav">
+          <button type="button" class="round-btn" data-rev-prev aria-label="Предыдущий отзыв" data-i18n-attr="aria-label:rev.prev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
+          <button type="button" class="round-btn" data-rev-next aria-label="Следующий отзыв" data-i18n-attr="aria-label:rev.next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          <div class="reviews__dots"></div>
+        </div>
+      </div>
+      <div class="swiper reviews__swiper">
+        <div class="swiper-wrapper">
+          <article class="swiper-slide review">
+            <div class="review__top"><span class="review__ava" style="--h:18">L</span><div><b data-i18n="rev.1.name">Лейла М.</b><span class="stars" aria-label="5/5">★★★★★</span></div></div>
+            <p data-i18n="rev.1.text">Филадельфия тает во рту, а кайтен на сайте — отдельный аттракцион. Заказали сет на день рождения — гости в восторге.</p>
+            <span class="review__dish" data-i18n="item.set.name">Сет «Нами»</span>
+          </article>
+          <article class="swiper-slide review">
+            <div class="review__top"><span class="review__ava" style="--h:95">A</span><div><b data-i18n="rev.2.name">Ариф Г.</b><span class="stars" aria-label="5/5">★★★★★</span></div></div>
+            <p data-i18n="rev.2.text">Привезли за 28 минут, рис ещё тёплый. Гункан с икрой — лучший в Баку, без преувеличения.</p>
+            <span class="review__dish" data-i18n="item.ikura.name">Гункан с икрой</span>
+          </article>
+          <article class="swiper-slide review">
+            <div class="review__top"><span class="review__ava" style="--h:200">A</span><div><b data-i18n="rev.3.name">Анна К.</b><span class="stars" aria-label="5/5">★★★★★</span></div></div>
+            <p data-i18n="rev.3.text">Сашими нарезаны как в Токио: тонко, ровно, и порции честные. Видно, что шеф знает своё дело.</p>
+            <span class="review__dish" data-i18n="item.sashimi.name">Сашими из лосося</span>
+          </article>
+          <article class="swiper-slide review">
+            <div class="review__top"><span class="review__ava" style="--h:30">T</span><div><b data-i18n="rev.4.name">Тимур Р.</b><span class="stars" aria-label="5/5">★★★★★</span></div></div>
+            <p data-i18n="rev.4.text">Взял «Дракона» ради интереса — теперь заказываю каждую пятницу. Соус унаги — огонь.</p>
+            <span class="review__dish" data-i18n="item.dragon.name">Дракон</span>
+          </article>
+          <article class="swiper-slide review">
+            <div class="review__top"><span class="review__ava" style="--h:320">S</span><div><b data-i18n="rev.5.name">Сара Л.</b><span class="stars" aria-label="5/5">★★★★★</span></div></div>
+            <p data-i18n="rev.5.text">Персонал отлично говорит по-английски, меню на трёх языках. Темаки — мой фаворит.</p>
+            <span class="review__dish" data-i18n="item.temaki.name">Темаки с лососем</span>
+          </article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DELIVERY ============ -->
+  <section class="delivery section" id="delivery">
+    <div class="delivery__grid">
+      <div class="delivery__copy">
+        <p class="eyebrow"><i class="dot"></i><span data-i18n="del.eyebrow">06 — Доставка</span></p>
+        <h2 class="h2" data-split data-i18n="del.title">35 минут от кухни до двери</h2>
+        <p class="lead" data-i18n="del.lead">Листайте — курьер проедет по маршруту. Линию рисует DrawSVG, движение задаёт MotionPath.</p>
+        <ul class="delivery__list">
+          <li><i>01</i><span data-i18n="del.f1">Бесплатно от 30 ₼</span></li>
+          <li><i>02</i><span data-i18n="del.f2">Термосумки сохраняют температуру риса</span></li>
+          <li><i>03</i><span data-i18n="del.f3">Каждый день с 11:00 до 23:00</span></li>
+        </ul>
+      </div>
+      <div class="delivery__map">
+        <svg class="map" viewBox="0 0 640 480" role="img" aria-label="Схема маршрута доставки" data-i18n-attr="aria-label:map.aria">
+          <defs>
+            <pattern id="waves" width="40" height="20" patternUnits="userSpaceOnUse">
+              <g fill="#0d2427" stroke="#1d4a4c" stroke-width="1.2">
+                <g transform="translate(20 -10)"><circle r="20"/><circle r="15" fill="none"/><circle r="10" fill="none"/><circle r="5" fill="none"/></g>
+                <g transform="translate(0 0)"><circle r="20"/><circle r="15" fill="none"/><circle r="10" fill="none"/><circle r="5" fill="none"/></g>
+                <g transform="translate(40 0)"><circle r="20"/><circle r="15" fill="none"/><circle r="10" fill="none"/><circle r="5" fill="none"/></g>
+                <g transform="translate(20 10)"><circle r="20"/><circle r="15" fill="none"/><circle r="10" fill="none"/><circle r="5" fill="none"/></g>
+                <g transform="translate(0 20)"><circle r="20"/><circle r="15" fill="none"/><circle r="10" fill="none"/><circle r="5" fill="none"/></g>
+                <g transform="translate(40 20)"><circle r="20"/><circle r="15" fill="none"/><circle r="10" fill="none"/><circle r="5" fill="none"/></g>
+                <g transform="translate(20 30)"><circle r="20"/><circle r="15" fill="none"/><circle r="10" fill="none"/><circle r="5" fill="none"/></g>
+              </g>
+            </pattern>
+          </defs>
+          <rect class="map__land" width="640" height="480" rx="28"/>
+          <g class="map__streets">
+            <path d="M-10 92 C 140 70, 300 96, 650 60"/>
+            <path d="M-10 170 C 120 150, 260 176, 420 150 S 600 110, 650 104"/>
+            <path d="M-10 250 C 90 236, 200 262, 330 240"/>
+            <path d="M70 -10 C 84 120, 60 250, 96 400"/>
+            <path d="M190 -10 C 200 100, 176 200, 214 330"/>
+            <path d="M330 -10 C 316 80, 344 160, 316 250"/>
+            <path d="M470 -10 C 480 60, 456 120, 470 190"/>
+            <path d="M560 -10 C 566 40, 552 90, 572 140"/>
+          </g>
+          <path class="map__sea" d="M0 420 C 110 396, 210 430, 300 368 S 420 236, 520 214 S 620 168, 640 160 L 640 480 L 0 480 Z" fill="url(#waves)"/>
+          <path class="map__coast" d="M0 420 C 110 396, 210 430, 300 368 S 420 236, 520 214 S 620 168, 640 160"/>
+          <text class="map__sea-label" x="470" y="400" data-i18n="map.sea">Каспийское море</text>
+          <path class="map__route-bg" d="M448 236 C 420 214, 396 196, 352 190 L 272 182 C 236 178, 226 150, 206 128 L 150 104"/>
+          <path class="map__route" id="route" d="M448 236 C 420 214, 396 196, 352 190 L 272 182 C 236 178, 226 150, 206 128 L 150 104"/>
+          <g class="map__pin map__pin--start" transform="translate(448 236)">
+            <circle r="20"/><text y="6" lang="ja">波</text>
+          </g>
+          <text class="map__label" x="474" y="262" data-i18n="map.kitchen">Кухня NAMI</text>
+          <g class="map__pin map__pin--end" transform="translate(150 104)">
+            <path d="M0 0 C -14 -16, -18 -24, -18 -32 A 18 18 0 1 1 18 -32 C 18 -24, 14 -16, 0 0 Z"/>
+            <circle cy="-32" r="7"/>
+          </g>
+          <text class="map__label" x="178" y="86" data-i18n="map.you">Вы</text>
+          <g class="map__courier" id="courier">
+            <circle r="17"/>
+            <path d="M-8 4 a3 3 0 1 0 0.1 0 M8 4 a3 3 0 1 0 0.1 0 M-8 4 L-2 4 L2 -4 L7 -4 M2 -4 L8 4 M-4 -6 L1 -6" fill="none"/>
+          </g>
+          <g class="map__time" transform="translate(300 300)">
+            <rect x="-56" y="-18" width="112" height="36" rx="18"/>
+            <text y="6" data-i18n="map.time">≈ 35 мин</text>
+          </g>
+        </svg>
+        <div class="delivery__contacts">
+          <div><small data-i18n="del.addr.k">Адрес</small><b data-i18n="del.addr">Баку, Приморский бульвар</b></div>
+          <div><small data-i18n="del.hours.k">Часы</small><b data-i18n="del.hours">11:00 — 23:00</b></div>
+          <div><small data-i18n="del.phone.k">Телефон</small><b>+994 00 000 00 00</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ UNDER THE HOOD ============ -->
+  <section class="stack section" id="stack">
+    <div class="section-head">
+      <p class="eyebrow"><i class="dot"></i><span data-i18n="stack.eyebrow">07 — Под капотом</span></p>
+      <h2 class="h2" data-split data-i18n="stack.title">12 плагинов, 0 картинок</h2>
+      <p class="lead" data-i18n="stack.lead">Все блюда — процедурные 3D-модели из примитивов Three.js. Вот что работает на этой странице:</p>
+    </div>
+    <ul class="stack__grid" data-stack></ul>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer__big" data-footer-big aria-hidden="true"><span>N</span><span>A</span><span>M</span><span>I</span><span class="jp" lang="ja">波</span></div>
+  <div class="footer__cols">
+    <div><small data-i18n="del.addr.k">Адрес</small><p data-i18n="del.addr">Баку, Приморский бульвар</p></div>
+    <div><small data-i18n="del.hours.k">Часы</small><p data-i18n="del.hours">11:00 — 23:00</p></div>
+    <div><small data-i18n="footer.social">Соцсети</small><p class="footer__social"><a href="#top">Instagram</a><a href="#top">Telegram</a><a href="#top">WhatsApp</a></p></div>
+    <div><small data-i18n="a11y.lang">Язык сайта</small><p class="footer__langs"><button type="button" data-lang="az">Azərbaycanca</button><button type="button" data-lang="ru">Русский</button><button type="button" data-lang="en">English</button></p></div>
+  </div>
+  <div class="footer__bottom">
+    <p data-i18n="footer.note">Демо-сайт. Все блюда нарисованы кодом, цены выдуманы.</p>
+    <a href="#top" class="footer__top" data-i18n="footer.top">Наверх ↑</a>
+  </div>
+</footer>
+
+<!-- Корзина -->
+<div class="cart" data-cart aria-hidden="true">
+  <div class="cart__backdrop" data-cart-close></div>
+  <aside class="cart__panel" role="dialog" aria-modal="true" aria-labelledby="cart-title" data-lenis-prevent>
+    <div class="cart__head">
+      <h2 id="cart-title" data-i18n="cart.title">Ваш заказ</h2>
+      <button type="button" class="round-btn" data-cart-close aria-label="Закрыть" data-i18n-attr="aria-label:a11y.close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="cart__free"><span class="cart__freebar"><i data-cart-freebar></i></span><p data-cart-free></p></div>
+    <ul class="cart__list" data-cart-list></ul>
+    <p class="cart__empty" data-cart-empty data-i18n="cart.empty">Корзина пуста. Добавьте что-нибудь из меню или поймайте тарелку на конвейере.</p>
+    <div class="cart__foot">
+      <p class="cart__total"><span data-i18n="cart.total">Итого</span><b data-cart-total>0 ₼</b></p>
+      <button type="button" class="btn btn--primary btn--block" data-checkout><span data-i18n="cart.checkout">Оформить заказ</span></button>
+    </div>
+    <div class="cart__done" data-cart-done hidden>
+      <span class="cart__done-jp" lang="ja">ありがとう</span>
+      <h3 data-i18n="cart.doneTitle">Заказ принят!</h3>
+      <p data-i18n="cart.doneText">Это демо, так что суши не приедут — но спасибо, что дошли до конца.</p>
+      <button type="button" class="btn btn--ghost" data-cart-again><span data-i18n="cart.again">Вернуться к меню</span></button>
+    </div>
+  </aside>
+</div>
+
+<div class="toasts" data-toasts aria-live="polite"></div>
+
+<!-- Плагины -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/SplitText.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/Flip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/DrawSVGPlugin.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/MotionPathPlugin.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrambleTextPlugin.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.4/dist/lenis.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/swiper@11.1.14/swiper-bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vanilla-tilt@1.8.1/dist/vanilla-tilt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<!-- Сайт -->
+<script src="js/i18n.js"></script>
+<script src="js/data.js"></script>
+<script src="js/models.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
