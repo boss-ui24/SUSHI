@@ -58,6 +58,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: clip;
+  position: relative; /* от него считается холст .gl.is-doc */
 }
 img, svg { display: block; }
 a { color: inherit; text-decoration: none; }
@@ -77,7 +78,12 @@ main { overflow-x: clip; }
 .bg__glow--a { top: -42vmax; right: -34vmax; background: radial-gradient(closest-side, rgba(255, 106, 61, .2), rgba(255, 106, 61, .06) 55%, transparent); }
 .bg__glow--b { bottom: -48vmax; left: -40vmax; background: radial-gradient(closest-side, rgba(169, 205, 78, .1), transparent 70%); }
 
-#gl { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.gl { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+#gl { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+/* Телефон: холст лежит в документе и скроллится вместе со страницей, см. place() в scene.js.
+   Высота в vh не меняется, когда прячется адресная строка; 150vh — это запас по 25vh сверху и снизу */
+.gl.is-doc { position: absolute; overflow: hidden; overflow-anchor: none; } /* холст двигается каждый кадр — браузер не должен выравнивать скролл по нему */
+.gl.is-doc #gl { height: 150vh; will-change: transform; }
 
 .grain { position: fixed; inset: 0; z-index: 300; overflow: hidden; pointer-events: none; opacity: .07; }
 .grain::before {
@@ -250,8 +256,8 @@ html[lang="en"] .lang__btn[data-lang="en"] { color: var(--ink); }
 .marquee__row--alt .marquee__track [lang="ja"] { -webkit-text-stroke: 0; color: rgba(255, 106, 61, .7); }
 
 /* ---------- Анатомия ---------- */
-.anatomy { position: relative; height: 100vh; height: 100svh; }
-.anatomy__pin { position: relative; height: 100%; max-width: var(--maxw); margin: 0 auto; display: grid; grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr); gap: 2vw; align-items: center; padding: calc(var(--header-h) + 10px) var(--gut) 24px; }
+.anatomy { position: relative; height: 320vh; height: calc(100svh + 220vh); }
+.anatomy__pin { position: sticky; top: 0; height: 100vh; height: 100svh; max-width: var(--maxw); margin: 0 auto; display: grid; grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr); gap: 2vw; align-items: center; padding: calc(var(--header-h) + 10px) var(--gut) 24px; }
 .anatomy__copy .lead { max-width: 40ch; }
 .anatomy__spec { display: flex; gap: 30px; margin: 36px 0 0; }
 .anatomy__spec div { display: flex; flex-direction: column-reverse; gap: 6px; }
@@ -392,14 +398,25 @@ html[lang="en"] .lang__btn[data-lang="en"] { color: var(--ink); }
 .delivery__contacts small { display: block; margin-bottom: 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
 .delivery__contacts b { font-size: 14.5px; font-weight: 600; }
 
-/* ---------- Под капотом ---------- */
-.stack__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
-.plugin { position: relative; display: flex; flex-direction: column; gap: 10px; min-height: 200px; padding: 22px; border-radius: 24px; border: 1px solid var(--line); background: linear-gradient(160deg, rgba(255, 241, 228, .055), rgba(255, 241, 228, .012)); transform-style: preserve-3d; }
-.plugin__n { font: 600 11.5px var(--f-body); letter-spacing: .14em; color: var(--dim); }
-.plugin h3 { margin: 0; font: 600 20px/1.15 var(--f-display); letter-spacing: -.02em; transform: translateZ(28px); }
-.plugin h3 small { margin-left: 6px; font: 600 11.5px var(--f-body); letter-spacing: .04em; color: var(--salmon-2); }
-.plugin p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--muted); transform: translateZ(14px); }
-.plugin .badge { align-self: flex-start; margin-top: auto; transform: translateZ(20px); }
+/* ---------- Конструктор ролла ---------- */
+.builder__grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: clamp(14px, 1.6vw, 22px); }
+.builder__stage { position: relative; min-height: clamp(460px, 68vh, 680px); border: 1px solid var(--line); border-radius: calc(var(--r) + 10px); }
+.builder__panel { display: flex; flex-direction: column; gap: 24px; min-width: 0; padding: clamp(22px, 2.6vw, 36px); border: 1px solid var(--line); border-radius: calc(var(--r) + 10px); background: var(--surface); }
+.bgroup { min-width: 0; margin: 0; padding: 0; border: 0; }
+.bgroup legend { padding: 0; margin-bottom: 12px; font: 600 12px/1.2 var(--f-body); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.bgroup legend small { margin-left: 6px; font-size: 11px; letter-spacing: .04em; text-transform: none; color: var(--dim); }
+.bgroup__list { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px 0 12px; }
+.opt i { flex: none; width: 11px; height: 11px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25); }
+.opt small { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--dim); }
+.opt small:empty { display: none; }
+.opt.is-active small { color: var(--paper-dim); }
+.builder__sum { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 16px; align-items: start; margin-top: auto; padding-top: 20px; border-top: 1px solid var(--line); }
+.builder__info small { display: block; margin-bottom: 4px; font-size: 12px; letter-spacing: .06em; color: var(--dim); }
+.builder__info p { margin: 0; font-size: 14.5px; line-height: 1.4; color: var(--rice); }
+.builder__price { font: 600 30px/1 var(--f-display); color: var(--salmon); white-space: nowrap; }
+.builder__actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
+
 
 /* ---------- Подвал ---------- */
 .footer { padding: clamp(70px, 9vw, 130px) var(--gut) 34px; border-top: 1px solid var(--line); overflow: hidden; }
@@ -455,13 +472,14 @@ html[lang="en"] .footer__langs [data-lang="en"] { color: var(--salmon); }
 .cart__done p { margin: 0 0 10px; color: var(--muted); }
 
 /* ---------- Тосты и «летящий» кусочек ---------- */
-.toasts { position: fixed; left: 50%; bottom: 24px; z-index: 170; display: flex; flex-direction: column; align-items: center; gap: 8px; transform: translateX(-50%); pointer-events: none; }
-.toast { display: flex; align-items: center; gap: 10px; padding: 10px 18px 10px 10px; border-radius: 999px; background: var(--rice); color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap; box-shadow: 0 14px 40px rgba(0, 0, 0, .45); }
-.toast i { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--salmon); font-style: normal; font-family: var(--f-jp); }
+.toasts { position: fixed; left: 50%; bottom: 24px; z-index: 170; width: max-content; max-width: calc(100vw - 24px); display: flex; flex-direction: column; align-items: center; gap: 8px; transform: translateX(-50%); pointer-events: none; }
+.toast { display: flex; align-items: center; gap: 10px; padding: 10px 18px 10px 10px; border-radius: 24px; background: var(--rice); color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.25; box-shadow: 0 14px 40px rgba(0, 0, 0, .45); }
+.toast i { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--salmon); font-style: normal; font-family: var(--f-jp); }
 .fly-dot { position: fixed; top: 0; left: 0; z-index: 160; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--salmon); box-shadow: 0 0 22px rgba(255, 106, 61, .85); pointer-events: none; }
 
 /* ---------- Без WebGL ---------- */
 .no-webgl .card__media::after,
+.no-webgl .builder__stage::after,
 .no-webgl .promo__media::after { content: attr(data-fallback); position: absolute; inset: 0; display: grid; place-items: center; font: 400 64px/1 var(--f-jp); color: rgba(255, 106, 61, .5); }
 
 /* ---------- Адаптив ---------- */
@@ -470,7 +488,8 @@ html[lang="en"] .footer__langs [data-lang="en"] { color: var(--salmon); }
   .burger { display: grid; }
   .promo__card { grid-template-columns: 1fr; }
   .promo__body { border-left: 0; border-top: 1px solid var(--line); border-radius: 0 0 calc(var(--r) + 10px) calc(var(--r) + 10px); }
-  .reviews__grid, .delivery__grid { grid-template-columns: 1fr; }
+  .reviews__grid, .delivery__grid, .builder__grid { grid-template-columns: 1fr; }
+  .builder__stage { min-height: 440px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .footer__cols { grid-template-columns: repeat(2, 1fr); }
 }
@@ -525,12 +544,24 @@ html[lang="en"] .footer__langs [data-lang="en"] { color: var(--salmon); }
   .review { padding: 24px; }
   .review p { font-size: 16px; }
   .delivery__contacts { grid-template-columns: 1fr; }
+  .builder__stage { min-height: 0; height: 84vw; max-height: 420px; }
+  .builder__panel { gap: 18px; padding: 20px 16px; }
+  .opt { height: 38px; padding: 0 12px 0 10px; font-size: 13.5px; }
+  .builder__sum { padding-top: 16px; }
+  .builder__actions .btn { flex: 1 1 auto; justify-content: center; padding: 0 16px; }
   .footer__cols { grid-template-columns: 1fr; }
   .footer__bottom { flex-direction: column; }
 }
 
 @media (max-width: 360px) {
   .logo__word { display: none; }
+}
+
+/* Размытие поверх WebGL и анимированное зерно на телефоне съедают кадры, а при скролле они нужнее */
+@media (pointer: coarse) {
+  .grain::before { animation: none; }
+  .header.is-scrolled, .kaiten__legend li, .kaiten__count { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .header.is-scrolled { background: rgba(12, 10, 9, .92); }
 }
 
 @media (prefers-reduced-motion: reduce) {

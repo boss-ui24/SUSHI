@@ -161,6 +161,18 @@ window.NamiModels = function (THREE, opts) {
     }
   });
 
+  // Ломтики авокадо внахлёст: от светлой мякоти к тёмной кромке у кожицы
+  const avocadoTex = canvasTex(256, 128, (g, w, h) => {
+    const n = 4, sw = w / n, skew = sw * 0.6;
+    for (let i = -1; i <= n + 1; i++) {
+      const x = i * sw;
+      const grd = g.createLinearGradient(x - skew / 2, 0, x + sw - skew / 2, 0);
+      grd.addColorStop(0, '#e6e48c'); grd.addColorStop(0.72, '#bdd35d'); grd.addColorStop(1, '#5d8a2b');
+      g.fillStyle = grd;
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x + sw, 0); g.lineTo(x + sw - skew, h); g.lineTo(x - skew, h); g.closePath(); g.fill();
+    }
+  });
+
   // Мягкая тень под объектом
   const blobTex = canvasTex(128, 128, (g, w, h) => {
     const grd = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
@@ -187,6 +199,7 @@ window.NamiModels = function (THREE, opts) {
     cheese: std({ color: '#fbf5ea', roughness: 0.75 }),
     avocado: std({ color: '#b9d15a', roughness: 0.42 }),
     avocadoSkin: std({ color: '#355d1f', roughness: 0.5 }),
+    avocadoWrap: std({ map: withRepeat(avocadoTex, 2, 1), roughness: 0.42 }),
     cucumber: std({ color: '#cfe79a', roughness: 0.4 }),
     cucumberSkin: std({ color: '#2e5a20', roughness: 0.45 }),
     crab: std({ color: '#fff4ec', roughness: 0.65 }),
@@ -796,10 +809,10 @@ window.NamiModels = function (THREE, opts) {
   const plateDisc = new THREE.CircleGeometry(0.72, 48);
   plateDisc.rotateX(-Math.PI / 2);
 
-  function plate(color) {
+  function plate(color, top = M.ceramic) {
     const g = new THREE.Group();
     const body = new THREE.Mesh(plateGeo, plateMaterial(color));
-    const disc = new THREE.Mesh(plateDisc, M.ceramic);
+    const disc = new THREE.Mesh(plateDisc, top);
     disc.position.y = 0.107;
     g.add(body, disc);
     g.userData.body = body;
@@ -920,6 +933,79 @@ window.NamiModels = function (THREE, opts) {
     return { group: g, L, path, update, size: new THREE.Vector3(Ls + 2 * (R + bw / 2 + counterW), 0.6, 2 * (R + bw / 2 + counterW)) };
   }
 
+  /* ======================== Ролл для конструктора ======================== */
+
+  // Форма одна на все сочетания: начинки только меняют материал, а варианты «шубы» собраны
+  // заранее и переключаются видимостью — смена опции не пересобирает геометрию
+  function customRoll({ q = 1 } = {}) {
+    const g = new THREE.Group();
+    const h = 0.62, rIn = 0.43, rNori = 0.46, rRice = 0.68, rWrap = 0.72; // сердцевина шире обычной: начинки — главное на тарелке
+    const disc = circleShape(rIn);
+    const slots = [[0.46, 0.22, 0, 0.13], [0.21, 0.17, -0.125, -0.12], [0.21, 0.17, 0.125, -0.12]].map(([w, d, x, y]) => {
+      const shape = () => rrect(w, d, Math.min(w, d) * 0.3, x, y);
+      disc.holes.push(shape());
+      const mesh = new THREE.Mesh(shapeGeo(shape(), h - 0.006), M.riceCut);
+      g.add(mesh);
+      return mesh;
+    });
+    // красная полоска крабовой палочки, иначе белая начинка теряется на рисе
+    const stripe = new THREE.Mesh(shapeGeo(rrect(0.46, 0.05, 0.016, 0, 0.215), h - 0.004), M.crabRed);
+    slots[0].add(stripe);
+    g.add(new THREE.Mesh(ringGeo(rRice, rNori, h), M.riceCut));
+    g.add(new THREE.Mesh(shapeGeo(disc, h - 0.002, 40), M.riceCut));
+    g.add(new THREE.Mesh(ringGeo(rNori, rIn, h + 0.006), M.nori));
+    g.add(grains(80 * q, onDisc(rNori + 0.05, rRice - 0.05, h / 2), 0.85));
+
+    const pack = (...parts) => { const o = new THREE.Group(); o.add(...parts); g.add(o); return o; };
+    const wrap = (side, cut) => {
+      const cap = (s) => {
+        const m = new THREE.Mesh(new THREE.RingGeometry(rRice - 0.004, rWrap, 72), cut);
+        m.rotation.x = -s * Math.PI / 2; m.position.y = s * (h / 2 + 0.003);
+        return m;
+      };
+      return pack(new THREE.Mesh(new THREE.CylinderGeometry(rWrap, rWrap, h + 0.004, 72, 1, true), side), cap(1), cap(-1));
+    };
+    const outers = {
+      sesame: pack(grains(220 * q, onTube(rRice, -h / 2 + 0.06, h / 2 - 0.06)), sesame(110 * q, onTube(rRice + 0.01, -h / 2 + 0.03, h / 2 - 0.03), 0.35)),
+      masago: pack(beads(G.bead, M.masago, 520 * q, onTube(rRice, -h / 2 + 0.02, h / 2 - 0.02), 0.026), beads(G.bead, M.masago, 90 * q, onDisc(rRice - 0.06, rRice - 0.008, h / 2), 0.024)),
+      salmon: wrap(M.salmonWrap, M.salmon),
+      avocado: wrap(M.avocadoWrap, M.avocado)
+    };
+
+    g.userData = {
+      slots,
+      set(c) {
+        slots[0].material = M[c.main];
+        stripe.visible = c.main === 'crab';
+        slots[1].material = M[c.extras[0]] || M.riceCut;
+        slots[2].material = M[c.extras[1]] || M.riceCut;
+        for (const k in outers) outers[k].visible = k === c.outer;
+      }
+    };
+    return g;
+  }
+
+  // Тёмная тарелка с тремя кусочками срезом вверх
+  function customPlate({ q = 1 } = {}) {
+    const g = new THREE.Group();
+    const dish = plate('#2a2421', M.slate);
+    dish.scale.set(2.3, 1.4, 2.3);
+    const sh = shadow(6.4);
+    sh.position.y = 0.004;
+    g.add(dish, sh);
+    const pieces = [[0, 0.88], [-0.762, -0.44], [0.762, -0.44]].map(([x, z], i) => {
+      const r = customRoll({ q });
+      const base = 0.107 * 1.4 + 0.312;
+      r.position.set(x, base, z);
+      r.rotation.y = i * 2.1;
+      r.userData.base = base;
+      g.add(r);
+      return r;
+    });
+    g.userData = { pieces, set: (c) => pieces.forEach((p) => p.userData.set(c)) };
+    return g;
+  }
+
   /* ======================== Композиции для карточек ======================== */
 
   function cardModel(key) {
@@ -953,6 +1039,6 @@ window.NamiModels = function (THREE, opts) {
   return {
     M, G,
     nigiri, roll, hosomaki, gunkan, temaki, sashimi, setBoard, chopsticks, ginger, wasabi,
-    plate, plateMaterial, plateItem, conveyor, cardModel, shadow, grounded, centered
+    plate, plateMaterial, plateItem, conveyor, cardModel, customPlate, shadow, grounded, centered
   };
 };

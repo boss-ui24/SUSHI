@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NAMI 波 — суши-бар в Баку</title>
-<meta name="description" content="Демо-сайт суши-бара: 3D-суши, собранные кодом на Three.js, анимации GSAP и три языка — AZ, RU, EN.">
+<meta name="description" content="Демо-сайт суши-бара в Баку: живые 3D-суши, кайтен-конвейер, конструктор ролла и три языка — AZ, RU, EN.">
 <meta name="theme-color" content="#0c0a09">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,7 +27,7 @@
 <!-- Фон за canvas: мягкие пятна света -->
 <div class="bg" aria-hidden="true"><i class="bg__glow bg__glow--a"></i><i class="bg__glow bg__glow--b"></i></div>
 <!-- Единый WebGL-canvas: все 3D-сцены рисуются в него через scissor по DOM-элементам с data-view -->
-<canvas id="gl" aria-hidden="true"></canvas>
+<div class="gl" aria-hidden="true"><canvas id="gl"></canvas></div>
 <div class="grain" aria-hidden="true"></div>
 <div class="progress" aria-hidden="true"><i></i></div>
 
@@ -71,6 +71,7 @@
     <a href="#kaiten" data-nav="kaiten" data-scramble data-i18n="nav.kaiten">Кайтен</a>
     <a href="#reviews" data-nav="reviews" data-scramble data-i18n="nav.reviews">Отзывы</a>
     <a href="#delivery" data-nav="delivery" data-scramble data-i18n="nav.delivery">Доставка</a>
+    <a href="#builder" data-nav="builder" data-scramble data-i18n="nav.builder">Свой ролл</a>
   </nav>
   <div class="header__actions">
     <div class="lang" role="group" aria-label="Язык сайта" data-i18n-attr="aria-label:a11y.lang">
@@ -94,6 +95,7 @@
     <a href="#kaiten"><small>03</small><span data-i18n="nav.kaiten">Кайтен</span></a>
     <a href="#reviews"><small>05</small><span data-i18n="nav.reviews">Отзывы</span></a>
     <a href="#delivery"><small>06</small><span data-i18n="nav.delivery">Доставка</span></a>
+    <a href="#builder"><small>07</small><span data-i18n="nav.builder">Свой ролл</span></a>
   </nav>
   <p class="mnav__jp" lang="ja" aria-hidden="true">寿司</p>
 </div>
@@ -166,7 +168,7 @@
     <div class="section-head">
       <p class="eyebrow"><i class="dot"></i><span data-i18n="menu.eyebrow">02 — Меню</span></p>
       <h2 class="h2" data-split data-i18n="menu.title">Каждое блюдо — живая 3D-модель</h2>
-      <p class="lead" data-i18n="menu.lead">Наведите курсор на карточку — суши повернутся к вам. Фильтры перестраивают сетку плагином Flip.</p>
+      <p class="lead" data-i18n="menu.lead">Наведите курсор на карточку — суши повернутся к вам. Выберите категорию, и сетка плавно перестроится.</p>
     </div>
     <div class="filters" data-filters>
       <button type="button" class="chip is-active" data-filter="all" aria-pressed="true" data-i18n="menu.f.all">Все</button>
@@ -352,14 +354,41 @@
     </div>
   </section>
 
-  <!-- ============ UNDER THE HOOD ============ -->
-  <section class="stack section" id="stack">
+  <!-- ============ BUILDER ============ -->
+  <section class="builder section" id="builder">
     <div class="section-head">
-      <p class="eyebrow"><i class="dot"></i><span data-i18n="stack.eyebrow">07 — Под капотом</span></p>
-      <h2 class="h2" data-split data-i18n="stack.title">12 плагинов, 0 картинок</h2>
-      <p class="lead" data-i18n="stack.lead">Все блюда — процедурные 3D-модели из примитивов Three.js. Вот что работает на этой странице:</p>
+      <p class="eyebrow"><i class="dot"></i><span data-i18n="build.eyebrow">07 — Конструктор</span></p>
+      <h2 class="h2" data-split data-i18n="build.title">Соберите свой ролл</h2>
+      <p class="lead" data-i18n="build.lead">Выберите «шубу» и начинку — ролл на тарелке меняется сразу, а цена считается сама.</p>
     </div>
-    <ul class="stack__grid" data-stack></ul>
+    <div class="builder__grid">
+      <div class="builder__stage" data-view="builder" data-cursor="view" data-fallback="巻"></div>
+      <div class="builder__panel">
+        <fieldset class="bgroup">
+          <legend data-i18n="build.outer">Снаружи</legend>
+          <div class="bgroup__list" data-opts="outer"></div>
+        </fieldset>
+        <fieldset class="bgroup">
+          <legend data-i18n="build.main">Главная начинка</legend>
+          <div class="bgroup__list" data-opts="main"></div>
+        </fieldset>
+        <fieldset class="bgroup">
+          <legend><span data-i18n="build.extras">Добавки</span> <small data-i18n="build.extrasHint">до двух</small></legend>
+          <div class="bgroup__list" data-opts="extras"></div>
+        </fieldset>
+        <div class="builder__sum">
+          <div class="builder__info">
+            <small data-build-meta></small>
+            <p data-build-list></p>
+          </div>
+          <b class="builder__price" data-build-price aria-live="polite"></b>
+          <div class="builder__actions">
+            <button type="button" class="btn btn--primary" data-build-add data-magnetic><span data-i18n="build.add">В корзину</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+            <button type="button" class="btn btn--ghost" data-build-random><span data-i18n="build.random">Удивите меня</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 </main>
 

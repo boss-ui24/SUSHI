@@ -52,15 +52,14 @@
       </article>`).join('');
   }
 
-  function renderStack() {
-    const tagClass = { core: 'badge--gold', lib: 'badge--green', gsap: '' };
-    $('[data-stack]').innerHTML = D.plugins.map((p, i) => `
-      <li class="plugin" data-tilt>
-        <span class="plugin__n">${String(i + 1).padStart(2, '0')}</span>
-        <h3>${p.name}<small>${p.ver}</small></h3>
-        <p data-i18n="${p.key}"></p>
-        <span class="badge ${tagClass[p.tag]}" data-i18n="stack.tag.${p.tag}"></span>
-      </li>`).join('');
+  function renderBuilder() {
+    $$('[data-opts]').forEach((box) => {
+      const group = box.dataset.opts;
+      box.innerHTML = B[group].map((o) => `
+        <button type="button" class="chip opt" data-opt="${group}:${o.id}" aria-pressed="false">
+          <i style="--c:${o.color}"></i><span data-i18n="build.${group}.${o.id}"></span><small data-opt-price="${o.price}"></small>
+        </button>`).join('');
+    });
   }
 
   // Тексты, которые собираются из данных: цены, граммы, aria-подписи
@@ -74,6 +73,74 @@
     $$('[data-add]').forEach((el) => el.setAttribute('aria-label', I.t('menu.addAria', { name: I.t('item.' + el.dataset.add + '.name') })));
     $$('[data-plate-price]').forEach((el) => { el.textContent = I.money(D.plates[el.dataset.platePrice].price); });
     $$('[data-count]').forEach((el) => { if (el.dataset.done) el.textContent = I.num(+el.dataset.count); });
+    $$('[data-opt-price]').forEach((el) => { const p = +el.dataset.optPrice; el.textContent = p ? '+' + I.money(p) : ''; });
+    $('[data-build-list]').textContent = customList(build).join(' · ');
+    $('[data-build-meta]').textContent = I.t('unit.pcs', { n: B.pcs }) + ' · ' + I.t('unit.g', { n: I.num(B.g) });
+    $('[data-build-price]').textContent = I.money(customPrice(build));
+  }
+
+  /* ============================= Свой ролл ============================= */
+  const B = D.builder;
+  const build = { outer: B.start.outer, main: B.start.main, extras: B.start.extras.slice() };
+  const optOf = (group, id) => B[group].find((o) => o.id === id);
+  const customPrice = (c) => B.base + optOf('outer', c.outer).price + optOf('main', c.main).price + c.extras.reduce((s, id) => s + optOf('extras', id).price, 0);
+  const customList = (c) => [I.t('build.outer.' + c.outer), I.t('build.main.' + c.main), ...c.extras.map((id) => I.t('build.extras.' + id))];
+  const customKey = (c) => `custom:${c.outer}.${c.main}.${c.extras.slice().sort().join('+')}`;
+  function parseCustom(k) {
+    const [outer, main, extras = ''] = k.slice(7).split('.');
+    const c = { outer, main, extras: extras ? extras.split('+') : [] };
+    return optOf('outer', outer) && optOf('main', main) && c.extras.every((id) => optOf('extras', id)) ? c : null;
+  }
+
+  function syncBuilder(changed) {
+    $$('[data-opt]').forEach((b) => {
+      const [group, id] = b.dataset.opt.split(':');
+      const on = group === 'extras' ? build.extras.includes(id) : build[group] === id;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    renderDynamic();
+    if (scene && changed) scene.builder.set(build, changed);
+  }
+
+  function pickOption(group, id) {
+    if (group !== 'extras') {
+      if (build[group] === id) return;
+      build[group] = id;
+    } else if (build.extras.includes(id)) {
+      build.extras.splice(build.extras.indexOf(id), 1);
+    } else {
+      build.extras.push(id);
+      if (build.extras.length > B.maxExtras) build.extras.shift(); // третья добавка вытесняет самую раннюю
+    }
+    syncBuilder(group);
+  }
+
+  function randomRoll() {
+    const any = (list) => list[Math.floor(Math.random() * list.length)].id;
+    const before = customKey(build);
+    do {
+      build.outer = any(B.outer);
+      build.main = any(B.main);
+      build.extras = B.extras.map((o) => o.id).sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * B.maxExtras));
+    } while (customKey(build) === before);
+    syncBuilder('all');
+  }
+
+  function initBuilder() {
+    syncBuilder();
+    $('.builder').addEventListener('click', (e) => {
+      const opt = e.target.closest('[data-opt]');
+      if (opt) { const [group, id] = opt.dataset.opt.split(':'); pickOption(group, id); return; }
+      const add = e.target.closest('[data-build-add]');
+      if (add) {
+        addToCart(customKey(build), add);
+        const r = add.getBoundingClientRect();
+        burst(r.left + r.width / 2, r.top, false);
+        return;
+      }
+      if (e.target.closest('[data-build-random]')) randomRoll();
+    });
   }
 
   /* ============================= Корзина ============================= */
@@ -83,9 +150,14 @@
   let cartOpen = false, mnavOpen = false;
 
   const isPlate = (k) => k.indexOf('plate:') === 0;
-  const itemOf = (k) => byId[isPlate(k) ? k.slice(6) : k];
+  const isCustom = (k) => k.indexOf('custom:') === 0;
+  const customItem = (k) => { const c = parseCustom(k); return c && { jp: '巻', price: customPrice(c), roll: c }; };
+  const itemOf = (k) => (isCustom(k) ? customItem(k) : byId[isPlate(k) ? k.slice(6) : k]);
   const priceOf = (k) => (isPlate(k) ? D.plates[itemOf(k).plate].price : itemOf(k).price);
-  const nameOf = (k) => (isPlate(k) ? I.t('cart.plate', { name: I.t('item.' + k.slice(6) + '.name') }) : I.t('item.' + k + '.name'));
+  const nameOf = (k) => {
+    if (isCustom(k)) return I.t('build.cartName', { list: customList(itemOf(k).roll).join(', ').toLocaleLowerCase(I.get()) });
+    return isPlate(k) ? I.t('cart.plate', { name: I.t('item.' + k.slice(6) + '.name') }) : I.t('item.' + k + '.name');
+  };
   const saveCart = () => { try { localStorage.setItem('nami-cart', JSON.stringify(cart)); } catch (e) { /* приватный режим */ } };
 
   function renderCart() {
@@ -349,16 +421,18 @@
       trigger: '.hero', start: 'top top', end: 'bottom top',
       onUpdate: (self) => { if (scene) scene.hero.out = self.progress; }
     });
-    gsap.to('.hero__inner', { yPercent: -22, opacity: 0, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
-    gsap.to('.hero__kanji', { yPercent: 30, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+    // на тач-экране события скролла приходят неровно, без сглаживания текст уезжал бы рывками
+    const heroScrub = fine ? true : 0.4;
+    gsap.to('.hero__inner', { yPercent: -22, opacity: 0, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: heroScrub } });
+    gsap.to('.hero__kanji', { yPercent: 30, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: heroScrub } });
 
-    // --- Анатомия: секция закреплена, скролл раскладывает ролл на слои ---
+    // --- Анатомия: сцена закреплена через position: sticky (браузер держит её сам, без рывков JS-пина),
+    // скролл раскладывает ролл на слои ---
     const anat = scene ? scene.anat : { explode: 0 };
     const bar = $('[data-anat-bar]');
     gsap.timeline({
       scrollTrigger: {
-        trigger: '.anatomy', start: 'top top', end: () => '+=' + Math.round(window.innerHeight * 2.2),
-        pin: true, scrub: 0.9, anticipatePin: 1, invalidateOnRefresh: true,
+        trigger: '.anatomy', start: 'top top', end: 'bottom bottom', scrub: 0.9,
         onUpdate: (self) => { bar.style.transform = `scaleX(${self.progress.toFixed(3)})`; }
       }
     })
@@ -395,14 +469,13 @@
 
     // --- Появление блоков ---
     if (!reduced) {
-      $$('.section-head .eyebrow, .section-head .lead, .anatomy__copy > .eyebrow, .anatomy__copy > .lead, .anatomy__spec, .anatomy__progress, .filters, .promo__card, .kaiten__stage, .philo .eyebrow, .philo__author, .reviews__copy > :not(.h2), .delivery__copy > :not(.h2), .delivery__map, .reviews__swiper, .footer__cols > *, .footer__bottom')
+      $$('.section-head .eyebrow, .section-head .lead, .anatomy__copy > .eyebrow, .anatomy__copy > .lead, .anatomy__spec, .anatomy__progress, .filters, .promo__card, .kaiten__stage, .philo .eyebrow, .philo__author, .reviews__copy > :not(.h2), .delivery__copy > :not(.h2), .delivery__map, .reviews__swiper, .builder__stage, .builder__panel, .footer__cols > *, .footer__bottom')
         .forEach((el) => gsap.from(el, { y: 40, opacity: 0, duration: 1.1, ease: 'expo.out', clearProps: 'transform', scrollTrigger: { trigger: el, start: 'top 90%', once: true } }));
       const batch = (sel) => {
         gsap.set(sel, { opacity: 0, y: 70 });
         ScrollTrigger.batch(sel, { start: 'top 92%', once: true, onEnter: (els) => gsap.to(els, { opacity: 1, y: 0, stagger: 0.08, duration: 1.1, ease: 'expo.out', clearProps: 'transform' }) });
       };
       batch('.card');
-      batch('.plugin');
       batch('.stat');
       gsap.from('.footer__big span', { yPercent: 80, opacity: 0, stagger: 0.07, duration: 1.3, ease: 'expo.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: '.footer__big', start: 'top 92%', once: true } });
     }
@@ -458,7 +531,7 @@
     gsap.to('.progress i', { scaleX: 1, ease: 'none', scrollTrigger: { start: 0, end: 'max', scrub: 0.3 } });
     let active = null;
     const setActive = (id) => { active = id; $$('[data-nav]').forEach((a) => a.classList.toggle('is-active', a.dataset.nav === id)); };
-    ['anatomy', 'menu', 'kaiten', 'reviews', 'delivery'].forEach((id) => ScrollTrigger.create({
+    ['anatomy', 'menu', 'kaiten', 'reviews', 'delivery', 'builder'].forEach((id) => ScrollTrigger.create({
       trigger: '#' + id, start: 'top 55%', end: 'bottom 55%',
       onToggle: (self) => { if (self.isActive) setActive(id); else if (active === id) setActive(null); }
     }));
@@ -609,10 +682,11 @@
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     window.scrollTo(0, 0);
     renderMenu();
-    renderStack();
+    renderBuilder();
     I.init();
     renderDynamic();
     initCart();
+    initBuilder();
 
     if (!hasG) {
       $('[data-preloader]').classList.add('is-done');
@@ -620,6 +694,9 @@
       return;
     }
     gsap.registerPlugin(...[window.ScrollTrigger, window.SplitText, window.Flip, window.DrawSVGPlugin, window.MotionPathPlugin, window.ScrambleTextPlugin].filter(Boolean));
+    // ScrollTrigger запоминает режим со своей загрузки и после refresh возвращал браузеру 'auto':
+    // тогда перезагрузка страницы открывала её не сверху, мимо прелоадера и интро
+    ScrollTrigger.clearScrollMemory('manual');
     html.style.overflow = 'hidden';
     $('[data-preloader]').classList.add('is-js'); // дальше прелоадером управляет JS, CSS-предохранитель не нужен
     initScroll();
@@ -644,6 +721,7 @@
           },
           onHover: (on) => { if (cursor.setOverride) cursor.setOverride(on); }
         });
+        scene.builder.set(build);
         pre.step(80);
         await scene.warmup();
       } catch (err) {

@@ -78,7 +78,7 @@ window.NamiScene = function (THREE, K, opts) {
   }
 
   /* ============================== HERO ============================== */
-  const hero = { out: 0, mx: 0, my: 0, sx: 0, sy: 0, rotY: 0.5, rotX: 0, vel: 0, drag: false };
+  const hero = { out: 0, soft: 0, mx: 0, my: 0, sx: 0, sy: 0, rotY: 0.5, rotX: 0, vel: 0, drag: false };
   const heroEl = document.querySelector('[data-view="hero"]');
   const heroScene = new THREE.Scene();
   rig(heroScene, { key: 2.6, rim: 2.4 });
@@ -136,7 +136,7 @@ window.NamiScene = function (THREE, K, opts) {
   function updateSesame(dt, tall) {
     for (let i = 0; i < SES; i++) {
       const d = sesData[i];
-      d.y += d.vy * dt * 0.3 * (1 + hero.out * 3);
+      d.y += d.vy * dt * 0.3 * (1 + hero.soft * 3);
       if (d.y > 1.15) d.y -= 2.3;
       d.rx += d.vr * dt; d.ry += d.vr * 0.7 * dt;
       const hh = (heroCam.position.z - d.z) * tanHalf, hw = hh * heroCam.aspect;
@@ -159,7 +159,8 @@ window.NamiScene = function (THREE, K, opts) {
       hero.vel *= Math.exp(-2.2 * dt);
       hero.rotX = damp(hero.rotX, 0, 2, dt);
     }
-    const out = hero.out;
+    // на телефоне события скролла приходят неровно: без сглаживания кусочки разлетаются рывками
+    const out = hero.soft = damp(hero.soft, hero.out, 12, dt);
     heroRoot.rotation.y = hero.sx * 0.1;
     heroRoot.rotation.x = hero.sy * 0.05;
     for (const k in pieces) {
@@ -182,6 +183,7 @@ window.NamiScene = function (THREE, K, opts) {
 
   // Мышь — лёгкий параллакс всей сцены
   window.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return; // палец на экране — это прокрутка, а не наведение
     hero.mx = e.clientX / window.innerWidth * 2 - 1;
     hero.my = e.clientY / window.innerHeight * 2 - 1;
   }, { passive: true });
@@ -198,9 +200,13 @@ window.NamiScene = function (THREE, K, opts) {
     dragEl.addEventListener('pointermove', (e) => {
       if (!hero.drag) return;
       const now = performance.now(), dx = e.clientX - lx, dy = e.clientY - ly;
-      hero.rotY += dx * 0.012;
-      hero.rotX = clamp(hero.rotX + dy * 0.006, -0.7, 0.7);
-      hero.vel = clamp((dx * 0.012) / Math.max(0.008, (now - lt) / 1000), -9, 9);
+      // вертикальный свайп пальцем — это прокрутка страницы, нигири от него не должно дёргаться
+      const touch = e.pointerType !== 'mouse';
+      if (!touch || Math.abs(dx) > Math.abs(dy)) {
+        hero.rotY += dx * 0.012;
+        if (!touch) hero.rotX = clamp(hero.rotX + dy * 0.006, -0.7, 0.7);
+        hero.vel = clamp((dx * 0.012) / Math.max(0.008, (now - lt) / 1000), -9, 9);
+      }
       lx = e.clientX; ly = e.clientY; lt = now;
     });
     const end = () => { hero.drag = false; };
@@ -383,7 +389,7 @@ window.NamiScene = function (THREE, K, opts) {
 
   // Координаты мыши храним в пикселях окна и пересчитываем в сцену каждый кадр:
   // при скролле сцена уезжает из-под неподвижного курсора, а pointerleave не приходит
-  const kst = { offset: 0, boost: 0, hovered: -1, cx: -1, cy: -1, ndc: new THREE.Vector2() };
+  const kst = { offset: 0, boost: 0, push: 0, hovered: -1, cx: -1, cy: -1, ndc: new THREE.Vector2() };
   window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') { kst.cx = e.clientX; kst.cy = e.clientY; } }, { passive: true });
   document.documentElement.addEventListener('mouseleave', () => { kst.cx = kst.cy = -1; });
   function pointerOver(rect) {
@@ -447,7 +453,9 @@ window.NamiScene = function (THREE, K, opts) {
   }
 
   function updateKaiten(time, dt, rect) {
-    kst.boost = damp(kst.boost, 0, 1.4, dt);
+    // скорость скролла на телефоне прыгает, поэтому лента разгоняется плавно
+    kst.boost = damp(kst.boost, kst.push, kst.push > kst.boost ? 6 : 1.4, dt);
+    kst.push = 0;
     kst.offset += ((reduced ? 0.25 : 0.6) + kst.boost) * dt;
     conv.update(kst.offset);
     for (const p of plates) {
@@ -491,11 +499,68 @@ window.NamiScene = function (THREE, K, opts) {
     }
   });
 
+  /* ============================ КОНСТРУКТОР ============================ */
+  const bEl = document.querySelector('[data-view="builder"]');
+  const bScene = new THREE.Scene();
+  rig(bScene, { key: 2.6, rim: 2 });
+  const bCam = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+  const bModel = K.customPlate({ q: 0.9 });
+  const bPivot = new THREE.Group();
+  bPivot.add(bModel);
+  bScene.add(bPivot);
+  const bSt = { spin: 0.5, extra: 0 };
+  bEl.addEventListener('click', () => { if (gsap) gsap.to(bSt, { extra: bSt.extra + TAU, duration: 1.4, ease: 'power3.inOut' }); });
+
+  addView(bEl, bScene, bCam, (time, dt) => {
+    bSt.spin += dt * (reduced ? 0.05 : 0.2);
+    bPivot.rotation.y = bSt.spin + bSt.extra;
+  }, { onResize: () => fitBox(bCam, _t.set(0, 0.3, 0), 2.3, 0.4, 2.3, 0.78, 1) });
+
+  // Новая «шуба» — кусочки подпрыгивают, новая начинка — въезжает в ролл сверху
+  const builder = {
+    set(cfg, changed) {
+      const { pieces, set } = bModel.userData;
+      set(cfg);
+      if (!gsap || reduced || !changed) return;
+      pieces.forEach((p, i) => {
+        const delay = i * 0.07;
+        if (changed === 'outer' || changed === 'all') {
+          gsap.fromTo(p.position, { y: p.userData.base + 0.9 }, { y: p.userData.base, duration: 0.8, ease: 'bounce.out', delay, overwrite: true });
+        }
+        const { slots } = p.userData;
+        const moved = changed === 'main' ? [slots[0]] : changed === 'extras' ? [slots[1], slots[2]] : changed === 'all' ? slots : [];
+        moved.forEach((s) => gsap.fromTo(s.position, { y: 0.8 }, { y: 0, duration: 0.6, ease: 'back.out(2)', delay, overwrite: true }));
+      });
+    }
+  };
+
   /* ============================== ЦИКЛ ============================== */
-  let W = 0, H = 0;
-  function render(time, dt) {
+  // Телефон двигает страницу в отдельном потоке, а кадр WebGL приходит позже: холст с position: fixed
+  // отставал от карточек, и суши дрожали при прокрутке. Поэтому здесь холст лежит в документе:
+  // браузер скроллит его вместе со страницей, а раз в кадр мы возвращаем его на экран.
+  // Запас over сверху и снизу закрывает резкий свайп. Когда анатомия закреплена (sticky),
+  // на месте должен стоять и холст — на это время он становится position: fixed.
+  const docCanvas = mobile;
+  if (docCanvas) canvas.parentElement.classList.add('is-doc');
+  const stuckEl = anatEl.closest('.anatomy__pin'), stuckBox = stuckEl.parentElement;
+  let W = 0, H = 0, over = 0, stuck = false, shift = null, offset = 0; // offset — верх холста в координатах окна
+
+  function place() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (w !== W || h !== H) { W = w; H = h; renderer.setSize(w, h, false); }
+    if (w !== W || h !== H) { W = w; H = h; over = docCanvas ? Math.round(h / 6) : 0; shift = null; renderer.setSize(w, h, false); }
+    if (!docCanvas) return;
+    const box = stuckBox.getBoundingClientRect();
+    const now = box.top <= 0 && box.bottom >= stuckEl.offsetHeight;
+    if (now !== stuck) { stuck = now; canvas.style.position = now ? 'fixed' : ''; shift = null; }
+    // сдвиг кратен пикселю буфера: иначе округление viewport даёт дрожь в полпикселя
+    const pr = renderer.getPixelRatio(), sy = window.scrollY;
+    const y = stuck ? 0 : Math.round(sy * pr) / pr;
+    if (y !== shift) { shift = y; canvas.style.transform = `translate3d(0,${y - over}px,0)`; }
+    offset = (stuck ? 0 : y - sy) - over;
+  }
+
+  function render(time, dt) {
+    place();
     renderer.setScissorTest(false);
     renderer.clear();
     renderer.setScissorTest(true);
@@ -507,7 +572,8 @@ window.NamiScene = function (THREE, K, opts) {
   }
   function draw(v, time, dt) {
     const r = v.el.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > H || r.right < 0 || r.left > W) return false;
+    const bottom = r.bottom - offset; // нижний край вида внутри холста
+    if (r.width < 2 || r.height < 2 || bottom < 0 || r.top - offset > H || r.right < 0 || r.left > W) return false;
     if (Math.abs(r.width - v.w) > 0.5 || Math.abs(r.height - v.h) > 0.5) {
       v.w = r.width; v.h = r.height;
       v.camera.aspect = r.width / r.height;
@@ -515,8 +581,8 @@ window.NamiScene = function (THREE, K, opts) {
       if (v.onResize) v.onResize(r);
     }
     if (v.update(time, dt, r) === false) return false;
-    renderer.setViewport(r.left, H - r.bottom, r.width, r.height);
-    renderer.setScissor(r.left, H - r.bottom, r.width, r.height);
+    renderer.setViewport(r.left, H - bottom, r.width, r.height);
+    renderer.setScissor(r.left, H - bottom, r.width, r.height);
     renderer.render(v.scene, v.camera);
     return true;
   }
@@ -532,9 +598,9 @@ window.NamiScene = function (THREE, K, opts) {
   }
 
   return {
-    renderer, hero, anat,
+    renderer, hero, anat, builder,
     render, warmup, introHero,
-    boost(v) { kst.boost = Math.max(kst.boost, Math.min(4.5, v * 0.06)); },
+    boost(v) { kst.push = Math.max(kst.push, Math.min(4.5, v * 0.06)); },
     relabel() { tipItem = null; tip.classList.remove('is-on'); kst.hovered = -2; }
   };
 };

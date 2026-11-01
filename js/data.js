@@ -1,4 +1,4 @@
-/* NAMI 波 — данные: меню, тарелки кайтена, список плагинов.
+/* NAMI 波 — данные: меню, тарелки кайтена, конструктор ролла.
    Тексты блюд лежат в i18n.js под ключами item.<id>.name / item.<id>.desc. */
 window.NamiData = {
   currency: '₼',
@@ -27,18 +27,30 @@ window.NamiData = {
     black: { price: 12, color: '#2a2421' }
   },
 
-  plugins: [
-    { name: 'Three.js', ver: 'r160', key: 'stack.three', tag: 'core' },
-    { name: 'GSAP', ver: '3.13', key: 'stack.gsap', tag: 'core' },
-    { name: 'ScrollTrigger', ver: '3.13', key: 'stack.st', tag: 'gsap' },
-    { name: 'SplitText', ver: '3.13', key: 'stack.split', tag: 'gsap' },
-    { name: 'Flip', ver: '3.13', key: 'stack.flip', tag: 'gsap' },
-    { name: 'DrawSVG', ver: '3.13', key: 'stack.draw', tag: 'gsap' },
-    { name: 'MotionPath', ver: '3.13', key: 'stack.mp', tag: 'gsap' },
-    { name: 'ScrambleText', ver: '3.13', key: 'stack.scramble', tag: 'gsap' },
-    { name: 'Lenis', ver: '1.3', key: 'stack.lenis', tag: 'lib' },
-    { name: 'Swiper', ver: '11', key: 'stack.swiper', tag: 'lib' },
-    { name: 'Vanilla-Tilt', ver: '1.8', key: 'stack.tilt', tag: 'lib' },
-    { name: 'canvas-confetti', ver: '1.9', key: 'stack.confetti', tag: 'lib' }
-  ]
+  /* Цена своего ролла = base + выбранные опции. id начинок совпадают с материалами в models.js */
+  builder: {
+    base: 7,
+    pcs: 8,
+    g: 250,
+    maxExtras: 2,
+    start: { outer: 'sesame', main: 'salmon', extras: ['cheese', 'cucumber'] },
+    outer: [
+      { id: 'sesame', price: 0, color: '#f0dfbd' },
+      { id: 'masago', price: 3, color: '#ff7a22' },
+      { id: 'avocado', price: 4, color: '#b9d15a' },
+      { id: 'salmon', price: 6, color: '#ff7f50' }
+    ],
+    main: [
+      { id: 'crab', price: 3, color: '#ef5a3c' },
+      { id: 'salmon', price: 4, color: '#ff7f50' },
+      { id: 'tuna', price: 5, color: '#b3263a' },
+      { id: 'eel', price: 6, color: '#7a4422' }
+    ],
+    extras: [
+      { id: 'cucumber', price: 1, color: '#cfe79a' },
+      { id: 'cheese', price: 2, color: '#fbf5ea' },
+      { id: 'avocado', price: 2, color: '#b9d15a' },
+      { id: 'tamago', price: 2, color: '#f2c14e' }
+    ]
+  }
 };
